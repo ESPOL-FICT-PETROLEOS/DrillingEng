@@ -5,6 +5,11 @@ import plotly.express as px
 from streamlit_option_menu import option_menu
 from PIL import Image
 
+import numpy as np
+from collections import namedtuple
+from math import radians, acos, asin, cos, sin, tan, atan, degrees, sqrt
+
+
 
 
 # Insert an icon
@@ -110,3 +115,356 @@ if file:
 
     elif options == "3D Plots":
         plots(df)
+
+
+
+#Lissette Pita
+
+# SECCIÓN AGREGADA: FUNCIONES DE CÁLCULO (DEL NOTEBOOK)
+
+# Estructuras de datos
+Data_J = namedtuple("Input_J", "TVD KOP BUR DH")
+Output_J = namedtuple("Output_J", "R Theta TVD_EOB Md_EOB Dh_EOB Tan_len Md_total")
+
+Data_S = namedtuple("Input_S", "TVD KOP BUR DOR DH")
+Output_S = namedtuple("Output_S",
+                      "R1 R2 Theta TVD_EOB Md_EOB Dh_EOB Tan_len Md_SOD TVD_SOD Dh_SOD Md_total")
+
+Data_H = namedtuple("Input_H", "TVD KOP BUR1 BUR2 DH")
+Output_H = namedtuple("Output_H",
+                      "R1 R2 Theta TVD_EOB1 Md_EOB1 Dh_EOB1 Tan_len Md_SOB2 Md_total")
+
+
+# Función Tipo J
+def well_J(data: Data_J, unit='ingles') -> Output_J:
+    tvd = data.TVD;
+    kop = data.KOP;
+    bur = data.BUR;
+    dh = data.DH
+
+    if unit == 'ingles':
+        R = 5729.58 / bur
+    else:
+        R = 1718.87 / bur
+
+    if dh > R:
+        dc = dh - R
+    elif dh < R:
+        dc = R - dh
+    else:
+        dc = 0
+
+    do = tvd - kop
+    doc = degrees(atan(dc / do))
+    oc = sqrt(dc ** 2 + do ** 2)
+
+    # Manejo seguro de acos
+    val_acos = R / oc
+    if val_acos > 1: val_acos = 1
+    if val_acos < -1: val_acos = -1
+    boc = degrees(acos(val_acos))
+
+    if R < dh:
+        bod = boc - doc
+    elif R > dh:
+        bod = boc + doc
+    else:
+        bod = boc
+
+    theta = 90 - bod
+    tvd_eob = kop + abs(R * sin(radians(theta)))
+    dh_eob = R - R * cos(radians(theta))
+    tan_len = sqrt(oc ** 2 - R ** 2)
+
+    if unit == 'ingles':
+        md_eob = kop + (theta / bur) * 100
+        md_total = kop + (theta / bur) * 100 + tan_len
+    else:
+        md_eob = kop + (theta / bur) * 30
+        md_total = kop + (theta / bur) * 30 + tan_len
+
+    return Output_J(R, theta, tvd_eob, md_eob, dh_eob, tan_len, md_total)
+
+
+# Función Tipo S
+def well_S(data: Data_S, unit='ingles'):
+    tvd = data.TVD;
+    kop = data.KOP;
+    bur = data.BUR;
+    dor = data.DOR;
+    dh = data.DH
+
+    if unit == 'ingles':
+        R1 = 5729.58 / bur; R2 = 5729.58 / dor
+    else:
+        R1 = 1718.87 / bur; R2 = 1718.87 / dor
+
+    if dh > (R1 + R2):
+        fe = dh - (R1 + R2)
+    elif dh < (R1 + R2):
+        fe = R1 - (dh - R2)
+    else:
+        fe = 0
+
+    eo = tvd - kop
+    foe = degrees(atan(fe / eo))
+    of = sqrt(fe **2 + eo **2)
+    fg = R1 + R2
+
+    val_asin = fg / of
+    if val_asin > 1: val_asin = 1
+    fog = degrees(asin(val_asin))
+
+    theta = fog - foe
+    tvd_eob = kop + R1 * sin(radians(theta))
+    dh_eob = R1 - abs(R1 * cos(radians(theta)))
+    tan_len = sqrt(of **2 - fg **2)
+    tvd_sod = tvd_eob + tan_len * abs(cos(radians(theta)))
+    dh_sod = dh_eob + abs(tan_len * sin(radians(theta)))
+
+    if unit == 'ingles':
+        md_eob = kop + (theta / bur) * 100
+        md_sod = kop + (theta / bur) * 100 + tan_len
+        md_total = kop + (theta / bur) * 100 + tan_len + (theta / dor) * 100
+    else:
+        md_eob = kop + (theta / bur) * 30
+        md_sod = kop + (theta / bur) * 30 + tan_len
+        md_total = kop + (theta / bur) * 30 + tan_len + (theta / dor) * 30
+
+    return Output_S(R1, R2, theta, tvd_eob, md_eob, dh_eob, tan_len, md_sod, tvd_sod,
+                    dh_sod, md_total)
+
+
+# Función Tipo Horizontal
+def Well_H(data_h: Data_H, unit="ingles") -> Output_H:
+    tvd = data_h.TVD;
+    kop = data_h.KOP;
+    bur1 = data_h.BUR1;
+    bur2 = data_h.BUR2;
+    dh = data_h.DH
+
+    if unit == 'ingles':
+        R1 = 5729.58 / bur1; R2 = 5729.58 / bur2
+    else:
+        R1 = 1718.87 / bur1; R2 = 1718.87 / bur2
+
+    EG = (tvd - kop) - R2
+    EO = dh - R1
+    A_GOE = np.arctan(EG / EO) * 180 / np.pi
+    OG = (EG * 2 + EO) * 0.5
+    OF = R1 - R2
+
+    val_arccos = OF / OG
+    if val_arccos > 1: val_arccos = 1
+    if val_arccos < -1: val_arccos = -1
+    A_GOF = np.arccos(val_arccos) * 180 / np.pi
+
+    A_AOB = 180 - A_GOE - A_GOF
+    TVD_V2 = kop + R1 * np.sin(A_AOB * np.pi / 180)
+
+    D1 = R1 - R1 * np.cos(A_AOB * np.pi / 180)
+    BC = (OG * 2 - OF) * 0.5
+    D2 = D1 + BC * np.sin(A_AOB * np.pi / 180)
+    A_GCD = 90 - (90 - A_GOF) - (90 - A_GOE)
+
+    if unit == 'ingles':
+        MD_EOB1 = kop + (A_AOB / bur1) * 100
+        MD_SOB2 = MD_EOB1 + BC
+        MDT = MD_SOB2 + (A_GCD / bur2) * 100
+    else:
+        MD_EOB1 = kop + (A_AOB / bur1) * 30
+        MD_SOB2 = MD_EOB1 + BC
+        MDT = MD_SOB2 + (A_GCD / bur2) * 30
+
+    return Output_H(R1, R2, A_AOB, TVD_V2, MD_EOB1, D1, BC, MD_SOB2, MDT)
+
+
+# SECCIÓN AGREGADA: LÓGICA DE BASIC CALCULATIONS
+
+if options == "Basic Calculations":
+    st.header("Cálculos Básicos para Pozos Direccionales")
+
+    # ==================================================
+    # SISTEMA DE UNIDADES
+    # ==================================================
+    st.subheader("Sistema de Unidades")
+
+    unit_system = st.selectbox(
+        "Seleccione el sistema de unidades",
+        ["Inglés", "Internacional"]
+    )
+
+    if unit_system == "Inglés":
+        unit_key = "ingles"
+        suffix = "ft"
+        bur_suffix = "°/100 ft"
+    else:
+        unit_key = "metrico"
+        suffix = "m"
+        bur_suffix = "°/30 m"
+
+    st.write("---")
+
+    # ==================================================
+    # TIPO DE POZO (PESTAÑAS)
+    # ==================================================
+    tab_j, tab_s, tab_h = st.tabs(
+        ["Pozo Tipo J", "Pozo Tipo S", "Pozo Horizontal"]
+    )
+
+    # ==================================================
+    # POZO TIPO J
+    # ==================================================
+    with tab_j:
+        st.subheader("Entradas – Pozo Tipo J")
+
+        c1, c2 = st.columns(2)
+        with c1:
+            j_tvd = st.number_input(
+                f"TVD final [{suffix}]",
+                min_value=0.0,
+                value=8000.0
+            )
+            j_kop = st.number_input(
+                f"KOP [{suffix}]",
+                min_value=0.0,
+                value=500.0
+            )
+
+        with c2:
+            j_bur = st.number_input(
+                f"Tasa de Construcción (BUR) [{bur_suffix}]",
+                min_value=0.1,
+                value=2.0
+            )
+            j_dh = st.number_input(
+                f"Desplazamiento Horizontal (DH) [{suffix}]",
+                min_value=0.0,
+                value=970.8
+            )
+
+        if st.button("Calcular Pozo Tipo J"):
+            st.subheader("Resultados – Pozo Tipo J")
+
+            res = well_J(
+                Data_J(j_tvd, j_kop, j_bur, j_dh),
+                unit=unit_key
+            )
+
+            st.success(f"Radio de Curvatura: {res.R:.3f} {suffix}")
+            st.success(f"Ángulo Máximo: {res.Theta:.3f} °")
+            st.success(f"TVD en EOB: {res.TVD_EOB:.3f} {suffix}")
+            st.success(f"MD en EOB: {res.Md_EOB:.3f} {suffix}")
+            st.success(f"DH en EOB: {res.Dh_EOB:.3f} {suffix}")
+            st.success(f"Longitud del Tramo Tangente: {res.Tan_len:.3f} {suffix}")
+            st.success(f"MD Total del Pozo: {res.Md_total:.3f} {suffix}")
+
+    # ==================================================
+    # POZO TIPO S
+    # ==================================================
+    with tab_s:
+        st.subheader("Entradas – Pozo Tipo S")
+
+        c1, c2 = st.columns(2)
+        with c1:
+            s_tvd = st.number_input(
+                f"TVD final [{suffix}]",
+                min_value=0.0,
+                value=12000.0
+            )
+            s_kop = st.number_input(
+                f"KOP [{suffix}]",
+                min_value=0.0,
+                value=6084.0
+            )
+            s_dh = st.number_input(
+                f"Desplazamiento Horizontal (DH) [{suffix}]",
+                min_value=0.0,
+                value=3500.0
+            )
+
+        with c2:
+            s_bur = st.number_input(
+                f"Tasa de Construcción (BUR) [{bur_suffix}]",
+                min_value=0.1,
+                value=3.0
+            )
+            s_dor = st.number_input(
+                f"Tasa de Caída (DOR) [{bur_suffix}]",
+                min_value=0.1,
+                value=2.0
+            )
+
+        if st.button("Calcular Pozo Tipo S"):
+            st.subheader("Resultados – Pozo Tipo S")
+
+            res = well_S(
+                Data_S(s_tvd, s_kop, s_bur, s_dor, s_dh),
+                unit=unit_key
+            )
+
+            st.success(f"Radio Build (R1): {res.R1:.3f} {suffix}")
+            st.success(f"Radio Drop (R2): {res.R2:.3f} {suffix}")
+            st.success(f"Ángulo Máximo: {res.Theta:.3f} °")
+            st.success(f"TVD en EOB: {res.TVD_EOB:.3f} {suffix}")
+            st.success(f"MD en EOB: {res.Md_EOB:.3f} {suffix}")
+            st.success(f"DH en EOB: {res.Dh_EOB:.3f} {suffix}")
+            st.success(f"Longitud del Tramo Tangente: {res.Tan_len:.3f} {suffix}")
+            st.success(f"MD en SOD: {res.Md_SOD:.3f} {suffix}")
+            st.success(f"TVD en SOD: {res.TVD_SOD:.3f} {suffix}")
+            st.success(f"DH en SOD: {res.Dh_SOD:.3f} {suffix}")
+            st.success(f"MD Total del Pozo: {res.Md_total:.3f} {suffix}")
+
+    # ==================================================
+    # POZO HORIZONTAL
+    # ==================================================
+    with tab_h:
+        st.subheader("Entradas – Pozo Horizontal")
+
+        c1, c2 = st.columns(2)
+        with c1:
+            h_tvd = st.number_input(
+                f"TVD objetivo [{suffix}]",
+                min_value=0.0,
+                value=3800.0
+            )
+            h_kop = st.number_input(
+                f"KOP [{suffix}]",
+                min_value=0.0,
+                value=2000.0
+            )
+            h_dh = st.number_input(
+                f"Desplazamiento Horizontal [{suffix}]",
+                min_value=0.0,
+                value=1800.0
+            )
+
+        with c2:
+            h_bur1 = st.number_input(
+                f"BUR 1 [{bur_suffix}]",
+                min_value=0.1,
+                value=5.73
+            )
+            h_bur2 = st.number_input(
+                f"BUR 2 [{bur_suffix}]",
+                min_value=0.1,
+                value=9.55
+            )
+
+        if st.button("Calcular Pozo Horizontal"):
+            st.subheader("Resultados – Pozo Horizontal")
+
+            res = Well_H(
+                Data_H(h_tvd, h_kop, h_bur1, h_bur2, h_dh),
+                unit=unit_key
+            )
+
+            st.success(f"Radio 1: {res.R1:.3f} {suffix}")
+            st.success(f"Radio 2: {res.R2:.3f} {suffix}")
+            st.success(f"Ángulo Final: {res.Theta:.3f} °")
+            st.success(f"TVD en EOB1: {res.TVD_EOB1:.3f} {suffix}")
+            st.success(f"MD en EOB1: {res.Md_EOB1:.3f} {suffix}")
+            st.success(f"DH en EOB1: {res.Dh_EOB1:.3f} {suffix}")
+            st.success(f"Longitud del Tramo Tangente: {res.Tan_len:.3f} {suffix}")
+            st.success(f"MD en SOB2: {res.Md_SOB2:.3f} {suffix}")
+            st.success(f"MD Total del Pozo: {res.Md_total:.3f} {suffix}")
